@@ -1,0 +1,4 @@
+.system_generated/
+*.tmp
+thumbs.db
+.DS_Store
