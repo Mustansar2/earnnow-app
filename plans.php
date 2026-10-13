@@ -29,7 +29,47 @@ $success = '';
 $nextMonthStartDate = date('Y-m-01', strtotime('first day of next month'));
 $nextMonthFormatted = date('F 01, Y', strtotime('first day of next month'));
 
-// Handle Upgrade Request (POST or GET)
+// Handle Direct Subscription for Expired, Rejected, or Pending Users
+if (isset($_POST['action']) && $_POST['action'] === 'subscribe_plan') {
+    $targetPlanId = intval($_POST['plan_id'] ?? 0);
+    $targetPlan = getPlanById($targetPlanId);
+
+    if (!$targetPlan || empty($targetPlan['is_active'])) {
+        $error = 'This investment package is currently deactivated and not available.';
+    } else {
+        $stmt = $db->prepare("
+            UPDATE users SET 
+                plan_id = ?, 
+                plan_name = ?, 
+                plan_amount = ?, 
+                initial_plan_amount = ?, 
+                monthly_profit = ?, 
+                package_status = 'pending', 
+                package_approved_at = NULL 
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $targetPlan['id'],
+            $targetPlan['name'],
+            $targetPlan['amount'],
+            $targetPlan['amount'],
+            $targetPlan['monthly_profit'],
+            $currentUser['id']
+        ]);
+
+        $currentUser['plan_id'] = $targetPlan['id'];
+        $currentUser['plan_name'] = $targetPlan['name'];
+        $currentUser['plan_amount'] = $targetPlan['amount'];
+        $currentUser['initial_plan_amount'] = $targetPlan['amount'];
+        $currentUser['monthly_profit'] = $targetPlan['monthly_profit'];
+        $currentUser['package_status'] = 'pending';
+        $_SESSION['user'] = $currentUser;
+
+        $success = 'Application for <strong>' . htmlspecialchars($targetPlan['name']) . ' ($' . number_format($targetPlan['amount'], 0) . ' USD)</strong> submitted! It is now waiting for <strong>Admin Approval</strong>.';
+    }
+}
+
+// Handle Upgrade Request for Active Users (POST or GET)
 $targetPlanId = 0;
 if (isset($_POST['action']) && $_POST['action'] === 'upgrade_plan') {
     $targetPlanId = intval($_POST['plan_id'] ?? 0);
@@ -37,12 +77,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'upgrade_plan') {
     $targetPlanId = intval($_GET['upgrade']);
 }
 
-if ($targetPlanId > 0) {
+if ($targetPlanId > 0 && (!isset($_POST['action']) || $_POST['action'] !== 'subscribe_plan')) {
     $targetPlan = getPlanById($targetPlanId);
 
-    if (!$targetPlan) {
-        $error = 'Invalid investment package selected.';
-    } elseif ($targetPlanId === (int)$currentUser['plan_id']) {
+    if (!$targetPlan || empty($targetPlan['is_active'])) {
+        $error = 'This investment package is currently deactivated and not available for upgrades.';
+    } elseif ($targetPlanId === (int)$currentUser['plan_id'] && ($currentUser['package_status'] ?? 'pending') === 'active') {
         $error = 'You are already active on this package.';
     } else {
         // Schedule upgrade for month start
@@ -149,12 +189,19 @@ require_once __DIR__ . '/includes/header.php';
     </div>
   </div>
 
-  <!-- 3 Investment Plans Grid (Compact No-Scroll Layout) -->
+  <!-- Investment Packages Grid (Compact No-Scroll Layout) -->
+  <?php $allPlans = getInvestmentPlans(false); ?>
   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 12px;">
-    <?php foreach ($INVESTMENT_PLANS as $planId => $plan): 
+    <?php foreach ($allPlans as $planId => $plan): 
+      $isActive = !empty($plan['is_active']);
       $isCurrent = ($currentUser['plan_id'] == $planId);
       $isScheduled = ($currentUser['next_plan_id'] == $planId);
       $isUpgrade = ($plan['amount'] > $currentUser['plan_amount']);
+
+      // If deactivated and not user's current or scheduled plan, hide from public view
+      if (!$isActive && !$isCurrent && !$isScheduled) {
+          continue;
+      }
     ?>
       <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; padding: 14px 18px; position: relative; border-color: <?php echo $isCurrent ? 'var(--accent-lime)' : ($isScheduled ? '#38bdf8' : 'var(--border-glass)'); ?>; <?php if ($isCurrent) echo 'box-shadow: 0 0 20px rgba(147, 215, 38, 0.14);'; ?>">
         
@@ -209,14 +256,19 @@ require_once __DIR__ . '/includes/header.php';
           </div>
 
           <!-- Features List -->
+          <?php $planMinWithdrawal = (float)($plan['min_withdrawal'] ?? ($plan['amount'] * 0.10)); ?>
           <ul style="list-style: none; padding: 0; margin: 0 0 12px 0; font-size: 0.78rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 5px;">
             <li style="display: flex; align-items: center; gap: 6px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-lime)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              Withdraw Profit Any Day (9:00 AM - 9:00 PM)
+              Withdraw Profit After <strong style="color: var(--accent-lime);">$<?php echo number_format($planMinWithdrawal, 0); ?> Profit</strong> (10% Threshold)
             </li>
             <li style="display: flex; align-items: center; gap: 6px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-lime)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              USDT (TRC-20) 1-Hour SLA Payout
+              Withdraw Daily Profit (9:00 AM - 9:00 PM)
+            </li>
+            <li style="display: flex; align-items: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-lime)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              USDT (TRC-20) / Easypaisa 1-Hour Payout
             </li>
             <li style="display: flex; align-items: center; gap: 6px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-lime)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -227,14 +279,29 @@ require_once __DIR__ . '/includes/header.php';
 
         <!-- Action / Upgrade Button -->
         <div style="padding-top: 10px; border-top: 1px solid var(--border-glass);">
-          <?php if ($isCurrent): ?>
+          <?php 
+            $userPkgStatus = $currentUser['package_status'] ?? 'pending';
+            if ($isCurrent && $userPkgStatus === 'active'): 
+          ?>
             <div style="text-align: center; padding: 8px; background: var(--accent-lime-soft); color: var(--accent-lime); border: 1px solid var(--accent-lime); border-radius: var(--radius-md); font-weight: 800; font-size: 0.82rem;">
               ✓ Current Active Package
+            </div>
+          <?php elseif ($isCurrent && $userPkgStatus === 'pending'): ?>
+            <div style="text-align: center; padding: 8px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; border-radius: var(--radius-md); font-weight: 800; font-size: 0.82rem;">
+              ⏳ Awaiting Admin Approval
             </div>
           <?php elseif ($isScheduled): ?>
             <div style="text-align: center; padding: 8px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; border-radius: var(--radius-md); font-weight: 800; font-size: 0.82rem;">
               ★ Upgrading on <?php echo date('M 01', strtotime('first day of next month')); ?>
             </div>
+          <?php elseif ($userPkgStatus === 'expired' || $userPkgStatus === 'rejected' || $userPkgStatus === 'pending'): ?>
+            <form method="POST" action="plans.php">
+              <input type="hidden" name="action" value="subscribe_plan">
+              <input type="hidden" name="plan_id" value="<?php echo $planId; ?>">
+              <button type="submit" class="btn btn-pwa" style="width: 100%; padding: 9px 14px; font-size: 0.84rem;">
+                <?php echo ($userPkgStatus === 'expired') ? 'Subscribe to this Package' : 'Select this Package'; ?> &rarr;
+              </button>
+            </form>
           <?php else: ?>
             <form method="POST" action="plans.php">
               <input type="hidden" name="action" value="upgrade_plan">

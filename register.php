@@ -14,7 +14,12 @@ if (isset($_SESSION['user_id'])) {
 }
 
 $error = '';
-$selectedPlanId = 2; // Default to 200 USD plan
+$activePlans = getInvestmentPlans(true);
+$defaultPlanId = !empty($activePlans) ? (isset($activePlans[2]) ? 2 : (int)array_key_first($activePlans)) : 1;
+$selectedPlanId = isset($_GET['plan']) ? (int)$_GET['plan'] : $defaultPlanId;
+if (!isset($activePlans[$selectedPlanId])) {
+    $selectedPlanId = $defaultPlanId;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
@@ -22,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = trim($_POST['phone'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
-    $planId = (int)($_POST['plan_id'] ?? 1);
+    $planId = (int)($_POST['plan_id'] ?? $defaultPlanId);
     $selectedPlanId = $planId;
 
     if (empty($name) || empty($email) || empty($phone) || empty($password)) {
@@ -33,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Password must be at least 6 characters long.';
     } elseif ($password !== $confirmPassword) {
         $error = 'Passwords do not match.';
-    } elseif (!isset($INVESTMENT_PLANS[$planId])) {
-        $error = 'Invalid investment plan selected.';
+    } elseif (!isset($activePlans[$planId])) {
+        $error = 'The selected investment plan is currently deactivated or unavailable.';
     } else {
         $db = getDB();
         
@@ -47,8 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
             $insertStmt = $db->prepare("
-                INSERT INTO users (name, email, phone, password, plan_id, plan_name, plan_amount, monthly_profit, balance)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users (name, email, phone, password, plan_id, plan_name, plan_amount, initial_plan_amount, monthly_profit, balance, package_status, role)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'pending', 'user')
             ");
             
             $inserted = $insertStmt->execute([
@@ -59,8 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $chosenPlan['id'],
                 $chosenPlan['name'],
                 $chosenPlan['amount'],
-                $chosenPlan['monthly_profit'],
-                0.00
+                $chosenPlan['amount'],
+                $chosenPlan['monthly_profit']
             ]);
 
             if ($inserted) {
@@ -71,11 +76,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'name' => $name,
                     'email' => $email,
                     'phone' => $phone,
+                    'role' => 'user',
                     'plan_id' => $chosenPlan['id'],
                     'plan_name' => $chosenPlan['name'],
                     'plan_amount' => $chosenPlan['amount'],
+                    'initial_plan_amount' => $chosenPlan['amount'],
                     'monthly_profit' => $chosenPlan['monthly_profit'],
-                    'balance' => 0.00
+                    'balance' => 0.00,
+                    'package_status' => 'pending'
                 ];
 
                 header('Location: index.php?registered=1');
@@ -94,7 +102,7 @@ require_once __DIR__ . '/includes/header.php';
 <div style="max-width: 680px; margin: 0 auto;">
   <div style="text-align: center; margin-bottom: 28px;">
     <h1 style="font-size: 1.85rem; font-weight: 800; color: var(--text-main); margin-bottom: 6px;">Create Your Account</h1>
-    <p style="color: var(--text-secondary); font-size: 0.95rem;">Join EarnNow, select your investment plan, and start earning monthly profits.</p>
+    <p style="color: var(--text-secondary); font-size: 0.95rem;">Join EarnNow, select your package, and get started. Your account is created immediately and your package will be activated upon Admin Approval.</p>
   </div>
 
   <?php if ($error): ?>
@@ -152,11 +160,11 @@ require_once __DIR__ . '/includes/header.php';
         2. Select Your Investment Plan
       </h3>
       <p style="color: var(--text-secondary); font-size: 0.88rem; margin-bottom: 16px;">
-        Choose from our 3 plans. Your monthly profit will be calculated and credited automatically.
+        Choose from our investment plans. Your monthly profit will be calculated and credited automatically.
       </p>
 
       <div class="plans-selection-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 28px;">
-        <?php foreach ($INVESTMENT_PLANS as $pId => $plan): 
+        <?php foreach ($activePlans as $pId => $plan): 
           $isSelected = ($selectedPlanId == $pId);
         ?>
           <label class="plan-card-option <?php echo $isSelected ? 'selected' : ''; ?>" style="position: relative; border: 2px solid <?php echo $isSelected ? 'var(--accent-lime)' : 'var(--border-glass)'; ?>; background: <?php echo $isSelected ? 'var(--bg-card)' : 'var(--bg-subtle)'; ?>; padding: 18px 14px; border-radius: var(--radius-lg); cursor: pointer; transition: var(--transition-speed); display: block;">

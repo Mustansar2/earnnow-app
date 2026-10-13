@@ -19,6 +19,11 @@ if (isset($_SESSION['user_id'])) {
     $stmt->execute([$_SESSION['user_id']]);
     $currentUser = $stmt->fetch();
     if ($currentUser) {
+        // Restrict admin accounts from user app pages; redirect directly to desktop Admin portal
+        if (($currentUser['role'] ?? '') === 'admin') {
+            header('Location: admin/index.php');
+            exit;
+        }
         checkAndApplyPendingUpgrade($currentUser);
         $isLoggedIn = true;
         $_SESSION['user'] = $currentUser;
@@ -117,6 +122,14 @@ $currentPage = basename($_SERVER['PHP_SELF']);
           Investment Packages
         </a>
 
+        <a href="videos.php" class="sidebar-link <?php echo ($currentPage === 'videos.php') ? 'active' : ''; ?>">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+          </svg>
+          Watch Tutorials
+        </a>
+
         <a href="deposit.php" class="sidebar-link <?php echo ($currentPage === 'deposit.php') ? 'active' : ''; ?>">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -133,6 +146,16 @@ $currentPage = basename($_SERVER['PHP_SELF']);
           </svg>
           Withdraw (TRC20)
         </a>
+
+        <?php if (($currentUser['role'] ?? '') === 'admin'): ?>
+          <div class="nav-section-title" style="margin-top: 14px; color: var(--accent-lime);">Admin Management</div>
+          <a href="admin/index.php" class="sidebar-link" style="border-left: 2px solid var(--accent-lime); background: rgba(147, 215, 38, 0.08);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-lime)" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <span style="font-weight: 700; color: var(--accent-lime);">Admin Portal</span>
+          </a>
+        <?php endif; ?>
       <?php else: ?>
         <a href="login.php" class="sidebar-link <?php echo ($currentPage === 'login.php') ? 'active' : ''; ?>">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

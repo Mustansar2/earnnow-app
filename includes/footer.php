@@ -2,7 +2,7 @@
 
     <!-- Footer Copyright -->
     <footer style="padding: 12px 20px; text-align: center; font-size: 0.78rem; color: var(--text-muted); border-top: 1px solid var(--border-glass); margin-top: auto;">
-      &copy; <?php echo date('Y'); ?> EarnNow Platform. All rights reserved. • Progressive Web App Enabled
+      &copy; <?php echo date('Y'); ?> EarnNow Platform. All rights reserved.
     </footer>
   </div> <!-- End .app-main -->
 </div> <!-- End .app-layout -->

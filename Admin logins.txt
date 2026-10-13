@@ -1,0 +1,6 @@
+🛡️ Admin Login Credentials
+Admin Portal URL: http://localhost:8000/admin/login.php
+Username / Email: mustansar.ba24@gmail.com
+Password: Test@12345
+Role: admin
+Status: Active & Verified

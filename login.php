@@ -7,9 +7,13 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/db.php';
 
-// If already logged in, redirect to dashboard
+// If already logged in, redirect to appropriate portal
 if (isset($_SESSION['user_id'])) {
-    header('Location: index.php');
+    if (isset($_SESSION['user']['role']) && $_SESSION['user']['role'] === 'admin') {
+        header('Location: admin/index.php');
+    } else {
+        header('Location: index.php');
+    }
     exit;
 }
 
@@ -34,12 +38,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'name' => $user['name'],
                 'email' => $user['email'],
                 'phone' => $user['phone'],
+                'role' => $user['role'] ?? 'user',
                 'plan_id' => $user['plan_id'],
                 'plan_name' => $user['plan_name'],
                 'plan_amount' => $user['plan_amount'],
+                'initial_plan_amount' => $user['initial_plan_amount'] ?? $user['plan_amount'],
                 'monthly_profit' => $user['monthly_profit'],
-                'balance' => $user['balance']
+                'balance' => $user['balance'],
+                'package_status' => $user['package_status'] ?? 'pending'
             ];
+
+            // If user is admin, route them straight to desktop Admin portal
+            if (($user['role'] ?? '') === 'admin') {
+                header('Location: admin/index.php');
+                exit;
+            }
 
             header('Location: index.php');
             exit;
